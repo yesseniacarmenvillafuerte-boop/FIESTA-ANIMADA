@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Memoria de Números Enteros</title>
+    <!-- Tailwind CSS desde CDN para estilos modernos y responsivos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts para un aspecto más atractivo -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background: linear-gradient(to bottom, #4A00E0, #8E2DE2);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 2rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            padding: 2rem;
+            max-width: 90%;
+            width: 700px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+
+        .card {
+            background-color: #f3e8ff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
+            cursor: pointer;
+            height: 100px; /* Tamaño fijo para la tarjeta */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            perspective: 1000px;
+            transition: transform 0.6s ease-in-out;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 1rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4A00E0;
+            user-select: none;
+        }
+
+        .card-front {
+            background-color: #8E2DE2;
+            color: white;
+            transform: rotateY(0deg);
+            transition: background-color 0.3s;
+        }
+        
+        .card-back {
+            background-color: #c084fc;
+            transform: rotateY(180deg);
+        }
+
+        .card.matched .card-back {
+            background-color: #a7f3d0;
+            color: #065f46;
+        }
+
+        #message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 2rem;
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            z-index: 1000;
+            display: none;
+        }
+
+        #message-box p {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #4A00E0;
+        }
+
+        #message-box button {
+            padding: 0.75rem 2rem;
+            border-radius: 9999px;
+            background-color: #8E2DE2;
+            color: white;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        #message-box button:hover {
+            background-color: #4A00E0;
+        }
+
+    </style>
+</head>
+<body class="p-4">
+    <div class="container text-center">
+        <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-indigo-500 mb-4">Juego de Memoria</h1>
+        <p class="text-gray-600 mb-6">Encuentra los pares correctos de operaciones y resultados.</p>
+        <div id="board" class="board"></div>
+        <button id="restart-button" class="mt-8 px-8 py-3 rounded-full bg-indigo-500 text-white font-bold text-lg shadow-lg hover:bg-indigo-600 transition duration-300">
+            Reiniciar Juego
+        </button>
+    </div>
+
+    <!-- Contenedor para mensajes de alerta personalizados -->
+    <div id="message-box">
+        <p id="message-text"></p>
+        <button id="message-button">Aceptar</button>
+    </div>
+
+    <script>
+        // Array de pares de operaciones y resultados
+        const pairs = [
+            { id: 1, op: "$$3 + (-5)$$", res: "$$-2$$" },
+            { id: 2, op: "$$(-4) \\times 2$$", res: "$$-8$$" },
+            { id: 3, op: "$$10 \\div (-2)$$", res: "$$-5$$" },
+            { id: 4, op: "$$(-7) - (-3)$$", res: "$$-4$$" },
+            { id: 5, op: "$$(-6) + 6$$", res: "$$0$$" },
+            { id: 6, op: "$$(-9) \\div (-3)$$", res: "$$3$$" },
+            { id: 7, op: "$$5 \\times 4$$", res: "$$20$$" },
+            { id: 8, op: "$$(-1) - 4$$", res: "$$-5$$" }
+        ];
+
+        let cards = [];
+        let flippedCards = [];
+        let matchedCards = [];
+        let canFlip = true;
+        let isGameOver = false;
+
+        const board = document.getElementById('board');
+        const restartButton = document.getElementById('restart-button');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const messageButton = document.getElementById('message-button');
+
+        // Función para mostrar un mensaje personalizado en lugar de alert()
+        function showMessage(text, isGameOverMessage = false) {
+            messageText.textContent = text;
+            messageBox.style.display = 'block';
+            
+            if (isGameOverMessage) {
+                messageButton.onclick = () => {
+                    messageBox.style.display = 'none';
+                    restartGame();
+                };
+            } else {
+                messageButton.onclick = () => {
+                    messageBox.style.display = 'none';
+                };
+            }
+        }
+
+        // Función para mezclar un array
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // Función para crear el tablero del juego
+        function createBoard() {
+            board.innerHTML = '';
+            cards = [];
+            matchedCards = [];
+            
+            // Duplicar las tarjetas y asignarles un tipo (op o res)
+            const allCards = pairs.flatMap(p => [
+                { ...p, type: 'op', content: p.op },
+                { ...p, type: 'res', content: p.res }
+            ]);
+
+            // Mezclar las tarjetas
+            shuffle(allCards).forEach(cardData => {
+                const cardElement = document.createElement('div');
+                cardElement.classList.add('card');
+                cardElement.dataset.id = cardData.id;
+                cardElement.dataset.type = cardData.type;
+
+                const cardFront = document.createElement('div');
+                cardFront.classList.add('card-front', 'absolute', 'flex', 'justify-center', 'items-center', 'w-full', 'h-full', 'rounded-2xl', 'text-white', 'font-bold', 'text-3xl');
+                cardFront.innerHTML = '?';
+
+                const cardBack = document.createElement('div');
+                cardBack.classList.add('card-back', 'absolute', 'flex', 'justify-center', 'items-center', 'w-full', 'h-full', 'rounded-2xl', 'text-indigo-900', 'text-2xl', 'font-bold');
+                cardBack.textContent = cardData.content;
+
+                cardElement.appendChild(cardFront);
+                cardElement.appendChild(cardBack);
+
+                cardElement.addEventListener('click', flipCard);
+                board.appendChild(cardElement);
+
+                cards.push({ element: cardElement, id: cardData.id, type: cardData.type });
+            });
+            // Renderizar las expresiones de LaTeX
+            if (typeof MathJax !== 'undefined') {
+                MathJax.typeset();
+            }
+        }
+
+        // Función para voltear una tarjeta
+        function flipCard(event) {
+            if (!canFlip || isGameOver) return;
+            const cardElement = event.currentTarget;
+            if (flippedCards.includes(cardElement) || matchedCards.includes(cardElement)) {
+                return;
+            }
+
+            cardElement.classList.add('flipped');
+            flippedCards.push(cardElement);
+
+            if (flippedCards.length === 2) {
+                canFlip = false;
+                setTimeout(checkMatch, 1000);
+            }
+        }
+
+        // Función para comprobar si las tarjetas volteadas coinciden
+        function checkMatch() {
+            const [card1, card2] = flippedCards;
+            const id1 = card1.dataset.id;
+            const id2 = card2.dataset.id;
+            const type1 = card1.dataset.type;
+            const type2 = card2.dataset.type;
+
+            if (id1 === id2 && type1 !== type2) {
+                // Coincidencia encontrada
+                card1.classList.add('matched');
+                card2.classList.add('matched');
+                matchedCards.push(card1, card2);
+                
+                // Efecto de sonido de coincidencia (opcional)
+                new Audio('https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3').play().catch(() => {});
+
+                if (matchedCards.length === cards.length) {
+                    isGameOver = true;
+                    setTimeout(() => showMessage('¡Felicidades! ¡Has completado el juego!', true), 500);
+                }
+            } else {
+                // No hay coincidencia, voltear de nuevo
+                card1.classList.remove('flipped');
+                card2.classList.remove('flipped');
+            }
+            flippedCards = [];
+            canFlip = true;
+        }
+        
+        // Función para reiniciar el juego
+        function restartGame() {
+            flippedCards = [];
+            matchedCards = [];
+            canFlip = true;
+            isGameOver = false;
+            createBoard();
+        }
+
+        // Escuchar el botón de reinicio
+        restartButton.addEventListener('click', () => {
+            if (isGameOver) {
+                restartGame();
+            } else {
+                showMessage('¿Estás seguro de que quieres reiniciar? Perderás tu progreso.', false);
+                messageButton.onclick = () => {
+                    messageBox.style.display = 'none';
+                    restartGame();
+                };
+            }
+        });
+
+        // Inicializar el juego
+        window.onload = function() {
+            createBoard();
+            // Carga la librería de MathJax para renderizar las fórmulas
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+            script.async = true;
+            document.head.appendChild(script);
+        };
+    </script>
+</body>
+</html>
